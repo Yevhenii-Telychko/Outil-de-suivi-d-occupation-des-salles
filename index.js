@@ -21,6 +21,27 @@ cli
                 return logger.error(`Error reading file: ${err}`.red);
             }
             logger.info(`Searching for rooms for course: ${args.course}`.blue);
+
+            let rooms = new Set();
+
+            let slotSet = cruParser.parse(data);
+
+            let filteredSlotSet = slotSet.filter((slot) => {
+                return slot.courseCode === args.course;
+            }).toArray();
+
+            if (filteredSlotSet.length > 0) {
+                filteredSlotSet.forEach(slot => {
+                    rooms.add(`${slot.room} - ${slot.capacity} places`);
+                });
+
+                logger.info(`Rooms for course "${args.course}":`.blue);
+                Array.from(rooms).forEach(room => {
+                    logger.info(room.green);
+                });
+            } else {
+                return logger.error(`Cours inconnu: ${args.course}`.red);
+            }
         });
     })
     //Capacité d’une salle
