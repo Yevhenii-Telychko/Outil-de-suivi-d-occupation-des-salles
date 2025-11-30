@@ -38,75 +38,136 @@ function getAllSlots() {
     return slotsSet
 }
 
-const path = require('path');
-
 const F2 = require('./F2');
 
-const F3 = require('./F3');
 
 cli
     .version('Outil de suivi d\'occupation des salles')
     .version('0.1.0')
     //Recherche de salles par cours
     .command('search-rooms', 'Search for rooms by course')
-    .argument('<file>', 'The file containing course and room data')
     .argument('<course>', 'The course name or code')
     .action(({args, options, logger}) => {
-        fs.readFile(args.file, 'utf8', (err, data) => {
-            if (err) {
-                return logger.error(`Error reading file: ${err}`.red);
-            }
-            logger.info(`Searching for rooms for course: ${args.course}`.blue);
+        logger.info(`Searching for rooms for course: ${args.course}`.blue);
 
-            let rooms = new Set();
+        let rooms = new Set();
 
-            let slotSet = cruParser.parse(data);
+        let slotSet = getAllSlots();
 
-            let filteredSlotSet = slotSet.filter((slot) => {
-                return slot.courseCode === args.course;
-            }).toArray();
+        let filteredSlotSet = slotSet.filter((slot) => {
+            return slot.courseCode === args.course;
+        }).toArray();
 
-            if (filteredSlotSet.length > 0) {
-                filteredSlotSet.forEach(slot => {
-                    rooms.add(`${slot.room} - ${slot.capacity} places`);
-                });
+        if (filteredSlotSet.length > 0) {
+            filteredSlotSet.forEach(slot => {
+                rooms.add(`${slot.room} - ${slot.capacity} places`);
+            });
 
-                logger.info(`Rooms for course "${args.course}":`.blue);
-                Array.from(rooms).forEach(room => {
-                    logger.info(room.green);
-                });
-            } else {
-                return logger.error(`Cours inconnu: ${args.course}`.red);
-            }
-        });
+            logger.info(`Rooms for course "${args.course}":`.blue);
+            Array.from(rooms).forEach(room => {
+                logger.info(room.green);
+            });
+        } else {
+            return logger.error(`Cours inconnu: ${args.course}`.red);
+        }
+
     })
     //Capacité d’une salle
     .command('room-capacity', 'Check the capacity of a room')
-    .argument('<file>', 'The file containing room data')
     .argument('<room>', 'The room code')
     .action(({args, logger}) => {
-        fs.readFile(args.file, 'utf8', (err, data) => {
-            if (err) {
-                return logger.error(`Error reading file: ${err}`.red);
-            }
-            logger.info(`Fetching capacity for room: ${args.room}`.blue);
-            let slotSet = cruParser.parse(data);
-        });
+        logger.info(`Fetching capacity for room: ${args.room}`.blue);
+        let slotSet = getAllSlots();
     })
 
     //Créneaux libres d’une salle
     .command('free-slots', 'Get available slots for a room')
-    .argument('<file>', 'The file containing room schedule data')
     .argument('<room>', 'The room code')
     .action(({args, options, logger}) => {
-        fs.readFile(args.file, 'utf8', (err, data) => {
-            if (err) {
-                return logger.error(`Error reading file: ${err}`.red);
+        logger.info(`Getting available slots for room: ${args.room}`.blue);
+
+        const slotSet = getAllSlots();
+        const filteredSlotSet = slotSet
+            .filter((slot) => slot.room === args.room)
+            .toArray();
+
+        const days = ['L', 'MA', 'ME', 'J', 'V'];
+        const OPEN_MINUTES = 8 * 60;
+        const CLOSE_MINUTES = 20 * 60;
+
+        const busyByDay = {};
+        for (const day of days) {
+            busyByDay[day] = [];
+        }
+
+        const toMinutes = (timeStr) => {
+            const [h, m] = timeStr.split(':').map(Number);
+            return h * 60 + m;
+        };
+
+        const formatTime = (minutes) => {
+            const h = Math.floor(minutes / 60);
+            const m = minutes % 60;
+            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        };
+
+        const mergeIntervals = (intervals) => {
+            if (intervals.length === 0) return [];
+            intervals.sort((a, b) => a.start - b.start);
+
+            const merged = [intervals[0]];
+            for (let i = 1; i < intervals.length; i++) {
+                const last = merged[merged.length - 1];
+                const current = intervals[i];
+
+                if (current.start <= last.end) {
+                    last.end = Math.max(last.end, current.end);
+                } else {
+                    merged.push({...current});
+                }
+            }
+            return merged;
+        };
+
+        filteredSlotSet.forEach(slot => {
+            if (!days.includes(slot.day)) return;
+
+            const start = toMinutes(slot.startTime);
+            const end = toMinutes(slot.endTime);
+
+            busyByDay[slot.day].push({start, end});
+        });
+
+        if (filteredSlotSet.length === 0) {
+            logger.info("Aucun cours pour cette salle, toute la plage est libre (08:00-20:00).".yellow);
+        }
+
+        for (const day of days) {
+            const mergedBusy = mergeIntervals(busyByDay[day]);
+            const freeIntervals = [];
+
+            let current = OPEN_MINUTES;
+
+            for (const interval of mergedBusy) {
+                if (interval.start > current) {
+                    freeIntervals.push({start: current, end: interval.start});
+                }
+                current = Math.max(current, interval.end);
             }
 
-            logger.info(`Getting available slots for room: ${args.room} on day: ${options.day}`.blue);
-            let slotSet = cruParser.parse(data);
-        });
+            if (current < CLOSE_MINUTES) {
+                freeIntervals.push({start: current, end: CLOSE_MINUTES});
+            }
+
+            if (freeIntervals.length === 0) {
+                logger.info(`${day} : aucune plage libre`);
+            } else {
+                const freeStr = freeIntervals
+                    .map(({start, end}) => `${formatTime(start)}-${formatTime(end)}`)
+                    .join(', ');
+                logger.info(`${day} : ${freeStr}`);
+            }
+        }
     })
 
     //Salles libres pour un créneau
@@ -115,14 +176,9 @@ cli
     .argument('<time>', 'Time to check for available rooms (HH:MM)')
     .argument('<day>', 'Day of the week to check availability', {validator: cli.STRING, default: 'All'})
     .action(({args, options, logger}) => {
-        fs.readFile(args.file, 'utf8', (err, data) => {
-            if (err) {
-                return logger.error(`Error reading file: ${err}`.red);
-            }
+        logger.info(`Finding available rooms for time: ${args.time} on day: ${options.day}`.blue);
+        let slotSet = getAllSlots();
 
-            logger.info(`Finding available rooms for time: ${args.time} on day: ${options.day}`.blue);
-            let slotSet = cruParser.parse(data);
-        });
     })
 
     //Génération d’un fichier iCalendar
@@ -133,16 +189,9 @@ cli
         default: './schedule.ics'
     })
     .action(({args, options, logger}) => {
-        // Read file data
-        fs.readFile(args.file, 'utf8', (err, data) => {
-            if (err) {
-                return logger.error(`Error reading file: ${err}`.red);
-            }
-
-            logger.info(`Generating iCalendar file for schedule from: ${args.file}`.blue);
-            let slotSet = cruParser.parse(data);
-            logger.info(`Saving to: ${options.output}`.blue);
-        });
+        logger.info(`Generating iCalendar file for schedule from: ${args.file}`.blue);
+        let slotSet = getAllSlots();
+        logger.info(`Saving to: ${options.output}`.blue);
     })
 
     //Vérification des conflits de planning
@@ -150,43 +199,25 @@ cli
     .argument('<file>', 'The file containing schedule data to check for conflicts')
     .argument('<time>', 'Time to check for conflicts')
     .action(({args, logger}) => {
-        fs.readFile(args.file, 'utf8', (err, data) => {
-            if (err) {
-                return logger.error(`Error reading file: ${err}`.red);
-            }
-
-            logger.info(`Checking for conflicts in schedule from file: ${args.file}`.blue);
-            let slotSet = cruParser.parse(data);
-        });
+        logger.info(`Checking for conflicts in schedule from file: ${args.file}`.blue);
+        let slotSet = getAllSlots();
     })
 
     //Statistiques d’occupation des salles
     .command('room-usage-stats', 'Get room usage statistics')
     .argument('<file>', 'The file containing room usage data')
     .action(({args, options, logger}) => {
-        fs.readFile(args.file, 'utf8', (err, data) => {
-            if (err) {
-                return logger.error(`Error reading file: ${err}`.red);
-            }
+        logger.info(`Gathering room usage stats from file: ${args.file} for day: ${options.day}`.blue);
+        let slotSet = getAllSlots();
 
-            logger.info(`Gathering room usage stats from file: ${args.file} for day: ${options.day}`.blue);
-            let slotSet = cruParser.parse(data);
-        });
     })
 
     //Classement des salles par capacité
     .command('rank-rooms', 'Rank rooms by their capacity')
     .argument('<file>', 'The file containing room data to rank')
     .action(({args, logger}) => {
-        // Read file data
-        fs.readFile(args.file, 'utf8', (err, data) => {
-            if (err) {
-                return logger.error(`Error reading file: ${err}`.red);
-            }
-
             logger.info(`Ranking rooms by capacity from file: ${args.file}`.blue);
-            let slotSet = cruParser.parse(data);
-        });
+            let slotSet = getAllSlots();
     });
 
 cli.run(process.argv.slice(2));
