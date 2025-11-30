@@ -8,6 +8,12 @@ const cli = require('@caporal/core').default;
 
 const cruParser = new CruParser();
 
+const path = require('path');
+
+const F1 = require('./F1');// importer la fonctionnalité 1
+
+const F2 = require('./F2');
+
 cli
     .version('Outil de suivi d\'occupation des salles')
     .version('0.1.0')
@@ -152,6 +158,42 @@ cli
             let slotSet = cruParser.parse(data);
         });
     });
+
+
+
+
+
+//test de si F1 Fonctionne 
+cli
+  .command('f1', 'Lancer la fonctionnalité F1 :  Recherche de salles par cours')
+  .argument('<file>', 'Fichier à traiter par F1')
+  .argument('<course>', 'Code du cours') // <-- ajoute bien l'argument ici
+  .action(({ args, logger }) => {
+      const { file, course } = args; // récupère les deux arguments
+      logger.info('Lancement de F1...'.blue);
+
+      // Passe aussi le code du cours à F1.run
+      F1.run(file, course);
+  });
+
+  //test de si F2 Fonctionne
+
+cli
+  .command('f2', 'Lancer la fonctionnalité F2 : capacité d’une salle')
+  .action(async ({ logger }) => {
+      const readline = require('readline').createInterface({
+          input: process.stdin,
+          output: process.stdout
+      });
+
+      readline.question('Code de la salle : ', roomCode => {
+          logger.info(`Recherche de la salle "${roomCode}"...`.blue);
+          F2.run(roomCode);
+          readline.close();
+      });
+  });
+
+
 
 cli.run(process.argv.slice(2));
 
