@@ -3,46 +3,72 @@ const colors = require('colors');
 const CruParser = require("./CruParser");
 
 const canvas = require('canvas');
+const path = require("node:path");
+const SlotSet = require("./SlotSet");
 
 const cli = require('@caporal/core').default;
 
 const cruParser = new CruParser();
+
+function getAllSlots() {
+    const baseDir = path.join(__dirname, 'data');
+
+    if (!fs.existsSync(baseDir)) {
+        console.error('Can\'t find a database !'.red);
+        return;
+    }
+
+    const subDirs = fs.readdirSync(baseDir, {withFileTypes: true})
+        .filter(d => d.isDirectory())
+        .map(d => path.join(baseDir, d.name));
+
+    let slotsSet = SlotSet.empty();
+
+    subDirs.forEach(dir => {
+        const cruFile = path.join(dir, 'edt.cru');
+        if (fs.existsSync(cruFile)) {
+            const data = fs.readFileSync(cruFile, 'utf8');
+            const slots = cruParser.parse(data).toArray();
+
+            slots.forEach(slot => {
+                slotsSet.add(slot);
+            });
+        }
+    });
+    return slotsSet
+}
 
 cli
     .version('Outil de suivi d\'occupation des salles')
     .version('0.1.0')
     //Recherche de salles par cours
     .command('search-rooms', 'Search for rooms by course')
-    .argument('<file>', 'The file containing course and room data')
     .argument('<course>', 'The course name or code')
     .action(({args, options, logger}) => {
-        fs.readFile(args.file, 'utf8', (err, data) => {
-            if (err) {
-                return logger.error(`Error reading file: ${err}`.red);
-            }
-            logger.info(`Searching for rooms for course: ${args.course}`.blue);
 
-            let rooms = new Set();
+        logger.info(`Searching for rooms for course: ${args.course}`.blue);
 
-            let slotSet = cruParser.parse(data);
+        let rooms = new Set();
 
-            let filteredSlotSet = slotSet.filter((slot) => {
-                return slot.courseCode === args.course;
-            }).toArray();
+        let slotSet = getAllSlots();
 
-            if (filteredSlotSet.length > 0) {
-                filteredSlotSet.forEach(slot => {
-                    rooms.add(`${slot.room} - ${slot.capacity} places`);
-                });
+        let filteredSlotSet = slotSet.filter((slot) => {
+            return slot.courseCode === args.course;
+        }).toArray();
 
-                logger.info(`Rooms for course "${args.course}":`.blue);
-                Array.from(rooms).forEach(room => {
-                    logger.info(room.green);
-                });
-            } else {
-                return logger.error(`Cours inconnu: ${args.course}`.red);
-            }
-        });
+        if (filteredSlotSet.length > 0) {
+            filteredSlotSet.forEach(slot => {
+                rooms.add(`${slot.room} - ${slot.capacity} places`);
+            });
+
+            logger.info(`Rooms for course "${args.course}":`.blue);
+            Array.from(rooms).forEach(room => {
+                logger.info(room.green);
+            });
+        } else {
+            return logger.error(`Cours inconnu: ${args.course}`.red);
+        }
+
     })
     //Capacité d’une salle
     .command('room-capacity', 'Check the capacity of a room')
