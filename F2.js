@@ -6,7 +6,7 @@ const colors = require('colors'); //colorer pr que ca slay
 const cruParser = new CruParser();
 
 function run(roomCode) {
-    const baseDir = path.join(__dirname, 'database', 'SujetA_data');
+    const baseDir = path.join(__dirname, 'data');
 
     if (!fs.existsSync(baseDir)) {
         console.error('Base de données introuvable !'.red);
