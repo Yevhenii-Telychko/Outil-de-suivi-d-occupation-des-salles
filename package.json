@@ -1,7 +1,28 @@
 {
+  "name": "outil-de-suivi-d-occupation-des-salles",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Yevhenii-Telychko/Outil-de-suivi-d-occupation-des-salles.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Yevhenii-Telychko/Outil-de-suivi-d-occupation-des-salles/issues"
+  },
+  "homepage": "https://github.com/Yevhenii-Telychko/Outil-de-suivi-d-occupation-des-salles#readme",
   "dependencies": {
-    "@caporal/core": "^2.0.7",
+    "@caporal/core": "^3.0.2",
     "canvas": "^3.2.0",
-    "colors": "^1.4.0"
+    "colors": "^1.4.0",
+    "vega": "^6.2.0",
+    "vega-lite": "^6.4.1"
   }
 }

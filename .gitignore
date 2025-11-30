@@ -125,6 +125,8 @@ dist
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
 
+# Webstorm
+.idea
 # yarn v3
 .pnp.*
 .yarn/*
@@ -137,3 +139,5 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+package-lock.json
