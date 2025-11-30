@@ -10,9 +10,9 @@ const cruParser = new CruParser();
 
 const path = require('path');
 
-const F1 = require('./F1');// importer la fonctionnalité 1
-
 const F2 = require('./F2');
+
+const F3 = require('./F3');
 
 cli
     .version('Outil de suivi d\'occupation des salles')
@@ -162,21 +162,7 @@ cli
 
 
 
-
-//test de si F1 Fonctionne 
-cli
-  .command('f1', 'Lancer la fonctionnalité F1 :  Recherche de salles par cours')
-  .argument('<file>', 'Fichier à traiter par F1')
-  .argument('<course>', 'Code du cours') // <-- ajoute bien l'argument ici
-  .action(({ args, logger }) => {
-      const { file, course } = args; // récupère les deux arguments
-      logger.info('Lancement de F1...'.blue);
-
-      // Passe aussi le code du cours à F1.run
-      F1.run(file, course);
-  });
-
-  //test de si F2 Fonctionne
+  //Ajout de la fonctionnalité F2 
 
 cli
   .command('f2', 'Lancer la fonctionnalité F2 : capacité d’une salle')
@@ -186,11 +172,28 @@ cli
           output: process.stdout
       });
 
-      readline.question('Code de la salle : ', roomCode => {
+      readline.question('Code de la salle dont tu veux connaitre la capacité : ', roomCode => {
           logger.info(`Recherche de la salle "${roomCode}"...`.blue);
           F2.run(roomCode);
           readline.close();
       });
+  });
+
+  //ajout de la fonctionnalité F3
+  cli
+  .command('f3', 'Lancer la fonctionnalité F3 : emploi du temps d’une salle')
+   .action(async ({ logger }) => {
+      const readline = require('readline').createInterface({
+          input: process.stdin,
+          output: process.stdout
+      });
+
+     readline.question('Entre le code de la salle dont tu veux lemploi du temps : ', roomCode => {
+          logger.info(`Recherche de l'emploi du temps pour la salle "${roomCode}"...`.blue);
+          F3.run(roomCode);
+          readline.close();
+      });
+
   });
 
 

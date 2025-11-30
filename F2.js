@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const CruParser = require('./CruParser');
-const colors = require('colors');
+const colors = require('colors'); //colorer pr que ca slay
 
 const cruParser = new CruParser();
 
@@ -13,11 +13,12 @@ function run(roomCode) {
         return;
     }
 
+    //ici on va lire les sous dossiers un par un 
     const subDirs = fs.readdirSync(baseDir, { withFileTypes: true })
                       .filter(d => d.isDirectory())
                       .map(d => path.join(baseDir, d.name));
 
-    let capacities = [];
+    let capacities = []; // Stocke les capacités trouvées correspondants a la salle 
 
     subDirs.forEach(dir => {
         const cruFile = path.join(dir, 'EDT.CRU');
@@ -25,6 +26,7 @@ function run(roomCode) {
             const data = fs.readFileSync(cruFile, 'utf8');
             const slots = cruParser.parse(data).toArray();
 
+            // Cherche la salle demandée
             slots.forEach(slot => {
                 if (slot.room && slot.room.toUpperCase() === roomCode.toUpperCase()) {
                     capacities.push(slot.capacity);
