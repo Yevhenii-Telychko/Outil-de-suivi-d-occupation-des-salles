@@ -1,4 +1,4 @@
-const {Slot} = require("./slot");
+const {Slot} = require("./Slot");
 
 class SlotSet {
     constructor() {
