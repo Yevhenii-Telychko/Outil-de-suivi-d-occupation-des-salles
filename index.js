@@ -119,8 +119,7 @@ cli
     .command('generate-icalendar', 'Generate an iCalendar file for the schedule')
     .argument('<file>', 'The file containing the schedule data to convert into an iCalendar')
     .option('-o, --output <output>', 'Path to save the generated iCalendar file', {
-        validator: cli.STRING,
-        default: './schedule.ics'
+        validator: cli.STRING, default: './schedule.ics'
     })
     .action(({args, options, logger}) => {
         // Read file data
@@ -152,17 +151,13 @@ cli
 
     //Statistiques d’occupation des salles
     .command('room-usage-stats', 'Get room usage statistics')
-    .argument('<file>', 'The file containing room usage data')
     .action(({args, options, logger}) => {
-        fs.readFile(args.file, 'utf8', (err, data) => {
-            if (err) {
-                return logger.error(`Error reading file: ${err}`.red);
-            }
 
-            logger.info(`Gathering room usage stats from file: ${args.file} for day: ${options.day}`.blue);
-            const slotSet = cruParser.parse(data).toArray();
 
-            if (slotSet.length === 0) {
+        logger.info(`Gathering room usage stats from file: ${args.file}`.blue);
+        const slotSet = getAllSlots().toArray();
+
+        if (slotSet.length === 0) {
             return logger.error("No slots found in file.".red);
         }
 
@@ -201,22 +196,14 @@ cli
         const avg = sumRates / roomsCount;
 
         logger.info(`\nAverage occupancy rate: ${avg.toFixed(2)}%`.cyan);
-    });
-})
-    
+    })
+
     //Classement des salles par capacité
     .command('rank-rooms', 'Rank rooms by their capacity')
-    .argument('<file>', 'The file containing room data to rank')
     .action(({args, logger}) => {
-        // Read file data
-        fs.readFile(args.file, 'utf8', (err, data) => {
-            if (err) {
-                return logger.error(`Error reading file: ${err}`.red);
-            }
-
-            logger.info(`Ranking rooms by capacity from file: ${args.file}`.blue);
-            let slotSet = cruParser.parse(data).toArray();
-            if (slotSet.length === 0) {
+        logger.info(`Ranking rooms by capacity from file: ${args.file}`.blue);
+        let slotSet = getAllSlots().toArray();
+        if (slotSet.length === 0) {
             return logger.error("No slots found in file.".red);
         }
 
@@ -236,8 +223,7 @@ cli
         sortedCap.forEach(cap => {
             logger.info(`${cap} places: ${capacityMap[cap].size} room(s)`.green);
         });
-    });
-})
+    })
 cli.run(process.argv.slice(2));
 
 // Export to .ics (example Monday = 6 Jan 2025)
