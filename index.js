@@ -5,6 +5,7 @@ const CruParser = require("./CruParser");
 const canvas = require('canvas');
 const path = require("node:path");
 const SlotSet = require("./SlotSet");
+const Slot = require("./Slot");
 
 const cli = require('@caporal/core').default;
 
@@ -186,13 +187,37 @@ cli
 
     //Salles libres pour un créneau
     .command('available-rooms', 'Find rooms available for a specific time slot')
-    .argument('<file>', 'The file containing room schedule data')
-    .argument('<time>', 'Time to check for available rooms (HH:MM)')
+    .argument('<startTime>', 'Start time to check for available rooms (HH:MM)')
+    .argument('<endTime>', 'End time to check for available rooms (HH:MM)')
     .argument('<day>', 'Day of the week to check availability', {validator: cli.STRING, default: 'All'})
     .action(({args, options, logger}) => {
-        logger.info(`Finding available rooms for time: ${args.time} on day: ${options.day}`.blue);
+        logger.info(`Finding available rooms for time: ${args.time} on day: ${args.day}`.blue);
         let slotSet = getAllSlots();
+        const slotToReserve = new Slot({
+            courseCode: "",
+            lessonType: "",
+            capacity: 0,
+            startTime: args.startTime,
+            endTime: args.endTime,
+            day: args.day,
+            room: "",
+            subgroup: "",
+            groupIndex: ""
+        })
+        const allRooms = [...new Set(slotSet.toArray().map(s => s.room))];
+        const roomsBusy = new Set();
 
+        slotSet.toArray().forEach(slot => {
+            slotToReserve.room = slot.room;
+            if (slot.overlapsSlot(slotToReserve)) {
+                roomsBusy.add(slot.room);
+            }
+        })
+        const freeRooms = allRooms.filter((room) => !roomsBusy.has(room));
+        logger.info(`All available rooms from ${args.startTime} to ${args.endTime} on day: ${args.day}`.green);
+        freeRooms.forEach(room => {
+            logger.info(`Room ${room} `);
+        })
     })
 
     //Génération d’un fichier iCalendar
@@ -209,11 +234,23 @@ cli
 
     //Vérification des conflits de planning
     .command('check-conflicts', 'Check for scheduling conflicts')
-    .argument('<file>', 'The file containing schedule data to check for conflicts')
-    .argument('<time>', 'Time to check for conflicts')
     .action(({args, logger}) => {
-        logger.info(`Checking for conflicts in schedule from file: ${args.file}`.blue);
-        let slotSet = getAllSlots();
+        logger.info(`Checking for conflicts in schedule`.blue);
+        let slotSet = getAllSlots().toArray();
+        let isOverlap = false;
+        for (let i = 0; i < slotSet.length; i++) {
+            for (let j = i + 1; j < slotSet.length - 1; j++) {
+                if (slotSet[i].overlapsSlot(slotSet[j])) {
+                    isOverlap = true;
+                    let slot1 = slotSet[i];
+                    let slot2 = slotSet[j];
+                    logger.warn(`Salle ${slot1.room}, ${slot1.day} ${slot1.startTime}-${slot1.endTime} chevauche ${slot2.startTime}-${slot2.endTime}`.red);
+                }
+            }
+        }
+        if (!isOverlap) {
+            logger.info(`Données valides, aucune collision détectée`.green)
+        }
     })
 
     //Statistiques d’occupation des salles
