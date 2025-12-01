@@ -1,6 +1,6 @@
 // CruParser.js
 
-const Slot  = require("./slot");
+const Slot  = require("./Slot");
 const SlotSet = require("./SlotSet");
 
 /**
