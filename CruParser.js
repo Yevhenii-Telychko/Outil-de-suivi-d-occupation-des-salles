@@ -1,6 +1,6 @@
 // CruParser.js
 
-const Slot  = require("./Slot");
+const Slot = require("./Slot");
 const SlotSet = require("./SlotSet");
 
 /**
@@ -10,10 +10,14 @@ function mapLessonType(raw) {
     if (!raw) return raw;
     const first = raw[0].toUpperCase();
     switch (first) {
-        case "C": return "CM"; // Lecture
-        case "D": return "TD"; // Tutorial
-        case "T": return "TP"; // Lab
-        default:  return raw;
+        case "C":
+            return "CM"; // Lecture
+        case "D":
+            return "TD"; // Tutorial
+        case "T":
+            return "TP"; // Lab
+        default:
+            return raw;
     }
 }
 
@@ -33,14 +37,14 @@ function parseSlotLine(line, currentCourseCode) {
         throw new Error("Invalid slot-line: " + line);
     }
 
-    const groupIndex    = parseInt(m[1], 10);
+    const groupIndex = parseInt(m[1], 10);
     const lessonTypeRaw = m[2];
-    const capacity      = parseInt(m[3], 10);
-    const day           = m[4];
-    const startTime     = m[5];
-    const endTime       = m[6];
-    const subgroup      = m[7];
-    const room          = m[8];
+    const capacity = parseInt(m[3], 10);
+    const day = m[4];
+    const startTime = m[5];
+    const endTime = m[6];
+    const subgroup = m[7];
+    const room = m[8];
 
     const lessonType = mapLessonType(lessonTypeRaw);
 
@@ -155,37 +159,59 @@ class CruParser {
     }
 
     /**
-     * Export a SlotSet to an iCalendar (.ics) string.
+     * Export a SlotSet to an iCalendar (.ics) string for a given user.
      *
      * Options:
-     *   - weekStartDate: Date of the Monday of the reference week.
-     *       L  -> +0 days
-     *       MA -> +1
-     *       ME -> +2
-     *       J  -> +3
-     *       V  -> +4
-     *   - uidDomain: domain used in UID (default: "example.com")
+     *   - courses: array of course codes to keep (e.g. ["ME101", "TP202"])
+     *   - periodStart: Date (start of export period, inclusive)
+     *   - periodEnd:   Date (end of export period, inclusive)
+     *   - uidDomain:   domain used in UID (default: "example.com")
      *
      * @param {SlotSet} slotSet
      * @param {Object} [options]
-     * @param {Date} [options.weekStartDate]
+     * @param {string[]} [options.courses]
+     * @param {Date} [options.periodStart]
+     * @param {Date} [options.periodEnd]
      * @param {string} [options.uidDomain]
      * @returns {string} iCalendar string
      */
     toICalendar(slotSet, options = {}) {
-        const weekStartDate = options.weekStartDate || new Date();
         const uidDomain = options.uidDomain || "example.com";
 
-        const items = slotSet.toArray();
+        const periodStart = options.periodStart || new Date();
+        const periodEnd = options.periodEnd || new Date(periodStart.getTime());
+
+        const courses =
+            options.courses && options.courses.length
+                ? new Set(options.courses)
+                : null;
+
+        // Filtrer les créneaux pour ne garder que ceux de l'utilisateur
+        const items = slotSet
+            .filter(slot => !courses || courses.has(slot.courseCode))
+            .sort()
+            .toArray();
 
         let lines = [];
         lines.push("BEGIN:VCALENDAR");
         lines.push("VERSION:2.0");
+        lines.push("PRODID:-//UTT//CRU Export//FR");
+        lines.push("CALSCALE:GREGORIAN");
+
+        const dtStamp = this._formatDateTime(new Date());
 
         items.forEach((slot, index) => {
-            lines = lines.concat(
-                this._slotToVEvent(slot, index, weekStartDate, uidDomain)
+            const veventLines = this._slotToVEvent(
+                slot,
+                index,
+                uidDomain,
+                dtStamp,
+                periodStart,
+                periodEnd
             );
+            if (veventLines.length > 0) {
+                lines = lines.concat(veventLines);
+            }
         });
 
         lines.push("END:VCALENDAR");
@@ -193,14 +219,45 @@ class CruParser {
         return lines.join("\r\n") + "\r\n";
     }
 
-    _dayOffset(day) {
+
+
+    /**
+     * Map "L"/"MA"/"ME"/"J"/"V" to JS getDay() index (0 = Sunday, 1 = Monday, ...)
+     */
+    _dayCodeToJsDow(day) {
         switch (day) {
-            case "L":  return 0;
-            case "MA": return 1;
-            case "ME": return 2;
-            case "J":  return 3;
-            case "V":  return 4;
-            default:   return 0;
+            case "L":
+                return 1;
+            case "MA":
+                return 2;
+            case "ME":
+                return 3;
+            case "J":
+                return 4;
+            case "V":
+                return 5;
+            default:
+                return 1;
+        }
+    }
+
+    /**
+     * Map "L"/"MA"/"ME"/"J"/"V" to iCalendar BYDAY code.
+     */
+    _dayCodeToICal(day) {
+        switch (day) {
+            case "L":
+                return "MO";
+            case "MA":
+                return "TU";
+            case "ME":
+                return "WE";
+            case "J":
+                return "TH";
+            case "V":
+                return "FR";
+            default:
+                return "MO";
         }
     }
 
@@ -225,48 +282,90 @@ class CruParser {
         );
     }
 
-    _parseTimeToDate(baseDate, dayCode, timeStr) {
-        const offset = this._dayOffset(dayCode);
-        const dt = new Date(baseDate.getTime());
-        dt.setDate(baseDate.getDate() + offset);
+    /**
+     * Compute first occurrence of a slot in the requested period:
+     * the first date >= periodStart matching the slot day, with given time.
+     */
+    _computeFirstOccurrence(periodStart, dayCode, timeStr) {
+        const targetDow = this._dayCodeToJsDow(dayCode);
+        const startDow = periodStart.getDay(); // 0..6
+
+        let delta = targetDow - startDow;
+        if (delta < 0) delta += 7;
+
+        const dt = new Date(periodStart.getTime());
+        dt.setDate(periodStart.getDate() + delta);
 
         const [hhStr, mmStr] = timeStr.split(":");
         const hh = parseInt(hhStr, 10);
         const mm = parseInt(mmStr, 10);
+
         dt.setHours(hh, mm, 0, 0);
         return dt;
     }
 
-    _slotToVEvent(slot, index, weekStartDate, uidDomain) {
-        const dtStart = this._parseTimeToDate(
-            weekStartDate,
+    /**
+     * Escape TEXT values according to RFC 5545 (\, ; , newlines).
+     */
+    _escapeText(text) {
+        if (text == null) return "";
+        return String(text)
+            .replace(/\\/g, "\\\\")
+            .replace(/;/g, "\\;")
+            .replace(/,/g, "\\,")
+            .replace(/\r\n|\n|\r/g, "\\n");
+    }
+
+    /**
+     * Convert one Slot to a VEVENT block with weekly RRULE in the given period.
+     */
+    _slotToVEvent(slot, index, uidDomain, dtStamp, periodStart, periodEnd) {
+        // First occurrence of this slot in the requested period
+        const dtStart = this._computeFirstOccurrence(
+            periodStart,
             slot.day,
             slot.startTime
         );
-        const dtEnd = this._parseTimeToDate(
-            weekStartDate,
-            slot.day,
-            slot.endTime
-        );
+
+        // If the first occurrence is after the end of the period, no event
+        if (dtStart > periodEnd) {
+            return [];
+        }
+
+        // End = same day, slot end time
+        const dtEnd = new Date(dtStart.getTime());
+        const [ehStr, emStr] = slot.endTime.split(":");
+        const eh = parseInt(ehStr, 10);
+        const em = parseInt(emStr, 10);
+        dtEnd.setHours(eh, em, 0, 0);
 
         const dtStartStr = this._formatDateTime(dtStart);
         const dtEndStr = this._formatDateTime(dtEnd);
 
-        const uid = `cru-${slot.courseCode}-${slot.day}-${index}@${uidDomain}`;
+        // UID unique par créneau
+        const uid = `cru-${slot.courseCode}-${slot.day}-${slot.startTime}-${index}@${uidDomain}`;
 
-        const summary =
+        const summary = this._escapeText(
             `${slot.courseCode} ${slot.lessonType}` +
-            (slot.subgroup ? ` (${slot.subgroup})` : "");
+            (slot.subgroup ? ` (${slot.subgroup})` : "")
+        );
+        const location = this._escapeText(slot.room || "");
 
-        const location = slot.room || "";
+        // RRULE jusqu'à la fin de la période (23:59:59)
+        const until = new Date(periodEnd.getTime());
+        until.setHours(23, 59, 59, 0);
+        const untilStr = this._formatDateTime(until);
+        const byDay = this._dayCodeToICal(slot.day);
 
         return [
             "BEGIN:VEVENT",
             `UID:${uid}`,
+            `DTSTAMP:${dtStamp}`,
             `DTSTART:${dtStartStr}`,
             `DTEND:${dtEndStr}`,
             `SUMMARY:${summary}`,
             `LOCATION:${location}`,
+            `RRULE:FREQ=WEEKLY;UNTIL=${untilStr};BYDAY=${byDay}`,
             "END:VEVENT"
         ];
     }

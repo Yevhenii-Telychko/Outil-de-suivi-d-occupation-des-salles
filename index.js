@@ -2,7 +2,6 @@ const fs = require("fs");
 const colors = require('colors');
 const CruParser = require("./CruParser");
 
-const canvas = require('canvas');
 const path = require("node:path");
 const SlotSet = require("./SlotSet");
 const Slot = require("./Slot");
@@ -39,9 +38,6 @@ function getAllSlots() {
     return slotsSet
 }
 
-const F2 = require('./F2');
-
-
 cli
     .version('Outil de suivi d\'occupation des salles')
     .version('0.1.0')
@@ -69,7 +65,7 @@ cli
                 logger.info(room.green);
             });
         } else {
-            return logger.error(`Cours inconnu: ${args.course}`.red);
+            return logger.warn(`Cours inconnu: ${args.course}`.red);
         }
 
     })
@@ -88,7 +84,7 @@ cli
         });
 
         if (capacities.length === 0) {
-            console.error(`Salle "${args.room}" introuvable dans la base de données.`.red);
+            console.warn(`Salle "${args.room}" introuvable dans la base de données.`.red);
         } else {
             const maxCapacity = Math.max(...capacities);
             console.log(`Salle ${args.room.toUpperCase()} a une capacité de ${maxCapacity} places`.green);
@@ -221,15 +217,85 @@ cli
     })
 
     //Génération d’un fichier iCalendar
-    .command('generate-icalendar', 'Generate an iCalendar file for the schedule')
-    .argument('<file>', 'The file containing the schedule data to convert into an iCalendar')
-    .option('-o, --output <output>', 'Path to save the generated iCalendar file', {
-        validator: cli.STRING, default: './schedule.ics'
+    .command('generate-icalendar', 'Generate an iCalendar (.ics) file for a user schedule')
+    .option('-c, --courses <courses>', 'Comma-separated list of course codes (ex: ME101,TP202)', {
+        validator: cli.STRING
     })
-    .action(({args, options, logger}) => {
-        logger.info(`Generating iCalendar file for schedule from: ${args.file}`.blue);
-        let slotSet = getAllSlots();
-        logger.info(`Saving to: ${options.output}`.blue);
+    .option('--start <date>', 'Start date (YYYY-MM-DD)', {
+        validator: cli.STRING,
+        required: true
+    })
+    .option('--end <date>', 'End date (YYYY-MM-DD)', {
+        validator: cli.STRING,
+        required: true
+    })
+    .option('-o, --output <output>', 'Path to save the generated iCalendar file', {
+        validator: cli.STRING,
+        default: './mon_agenda.ics'
+    })
+    .option('--uid-domain <domain>', 'Domain used for event UIDs', {
+        validator: cli.STRING,
+        default: 'edt.example.fr'
+    })
+    .action(({options, logger}) => {
+        logger.info('Generating iCalendar file for selected courses...'.blue);
+
+        const slotSet = getAllSlots();
+        if (!slotSet) {
+            return logger.error('No CRU data found. Please check the data directory.'.red);
+        }
+
+        const parseDate = (value, label) => {
+            if (!value) {
+                throw new Error(`Missing ${label} date`);
+            }
+            const parts = value.split('-');
+            if (parts.length !== 3) {
+                throw new Error(`Invalid ${label} date format, expected YYYY-MM-DD: ${value}`);
+            }
+            const y = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10) - 1;
+            const d = parseInt(parts[2], 10);
+            return new Date(y, m, d);
+        };
+
+        try {
+            const periodStart = parseDate(options.start, 'start');
+            const periodEnd = parseDate(options.end, 'end');
+
+            if (periodEnd < periodStart) {
+                throw new Error('End date must be after start date.');
+            }
+
+            let courses = null;
+            if (options.courses) {
+                courses = options.courses
+                    .split(',')
+                    .map(c => c.trim())
+                    .filter(Boolean);
+            }
+
+            const ics = cruParser.toICalendar(slotSet, {
+                courses,
+                periodStart,
+                periodEnd,
+                uidDomain: options.uidDomain
+            });
+
+            if (!ics.includes('BEGIN:VEVENT')) {
+                logger.warn(
+                    'Aucun cours trouvé pour les paramètres demandés (cours + période). Export annulé.'
+                        .yellow
+                );
+            }
+
+            fs.writeFileSync(options.output, ics, 'utf8');
+            logger.info(`Export réussi: ${options.output}`.green);
+        } catch (err) {
+            logger.error(
+                `Erreur lors de la génération du fichier iCalendar: ${err.message}`.red
+            );
+        }
     })
 
     //Vérification des conflits de planning
