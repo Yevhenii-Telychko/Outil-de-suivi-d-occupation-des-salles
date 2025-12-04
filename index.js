@@ -209,7 +209,7 @@ cli
             const ranking = service.rankRoomsByCapacity();
             ranking.forEach(item => {
                 logger.info(
-                    `${item.capacity} places: ${item.roomsCount} chambre(s)`.green
+                    `${item.capacity} places: ${item.roomsCount} salle(s)`.green
                 );
             });
         } catch (e) {
