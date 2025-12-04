@@ -105,11 +105,7 @@ node index.js available-rooms 14:00 16:00 ME
 ### **F5 – Export iCalendar (.ics)**
 
 ```bash
-node index.js generate-icalendar \
-  --courses ME01,ME03 \
-  --start 2025-01-06 \
-  --end 2025-02-01 \
-  --output mon_agenda.ics
+node index.js generate-icalendar --courses ME01,ME03 --start 2025-01-06 --end 2025-02-01 --output mon_agenda.ics
 ```
 
 ### **F6 – Vérification des conflits**
